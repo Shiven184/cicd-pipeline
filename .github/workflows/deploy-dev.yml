@@ -1,0 +1,129 @@
+name: Deploy to Dev (CI/CD Pipeline)
+
+on:
+  push:
+    branches:
+      - dev
+    paths:
+      - 'cloudformation/**'
+      - '.github/workflows/**'
+
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'deploy = create stack | destroy = delete stack'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+          - deploy
+          - destroy
+
+jobs:
+
+  validate:
+    name: Validate CloudFormation Template
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Install cfn-lint
+        run: pip install cfn-lint
+
+      - name: Lint CloudFormation template
+        run: |
+          cfn-lint cloudformation/pipeline.yaml --ignore-checks W1011
+          echo "Lint passed."
+
+      - name: Validate template against AWS
+        run: |
+          aws cloudformation validate-template \
+            --template-body file://cloudformation/pipeline.yaml
+          echo "AWS validation passed."
+
+  deploy:
+    name: Deploy Pipeline Stack to Dev
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'deploy'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Deploy CloudFormation stack
+        run: |
+          aws cloudformation deploy \
+            --template-file cloudformation/pipeline.yaml \
+            --stack-name cicd-pipeline-dev \
+            --region ${{ secrets.AWS_REGION }} \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --parameter-overrides \
+              ProjectName=cicd-demo-app \
+              GitHubOwner=Shiven184 \
+              GitHubRepo=cicd-pipeline \
+              GitHubBranch=main \
+              GitHubToken=${{ secrets.TOKEN_FOR_CODEPIPELINE }} \
+              StageName=dev \
+            --no-fail-on-empty-changeset
+
+      - name: Print stack outputs
+        run: |
+          echo "Stack deployed. Fetching outputs..."
+          aws cloudformation describe-stacks \
+            --stack-name cicd-pipeline-dev \
+            --region ${{ secrets.AWS_REGION }} \
+            --query "Stacks[0].Outputs" \
+            --output table
+
+  destroy:
+    name: Destroy Dev Stack
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.action == 'destroy'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ secrets.AWS_REGION }}
+
+      - name: Empty artifact bucket before deletion
+        run: |
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          BUCKET="cicd-demo-app-artifacts-${ACCOUNT_ID}-dev"
+          echo "Emptying bucket $BUCKET..."
+          aws s3 rm s3://$BUCKET --recursive || true
+
+      - name: Delete stack
+        run: |
+          aws cloudformation delete-stack \
+            --stack-name cicd-pipeline-dev \
+            --region ${{ secrets.AWS_REGION }}
+
+          aws cloudformation wait stack-delete-complete \
+            --stack-name cicd-pipeline-dev \
+            --region ${{ secrets.AWS_REGION }}
+
+          echo "Stack deleted."
