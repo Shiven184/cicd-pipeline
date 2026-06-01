@@ -7,29 +7,29 @@ phases:
       nodejs: 20
     commands:
       - echo "Install phase"
-      - cd app
-      - npm install
+      - npm install --prefix app
 
   pre_build:
     commands:
       - echo "Pre-build - running tests"
-      - cd app && npm test
+      - npm test --prefix app
 
   build:
     commands:
-      - echo "Build phase"
-      - echo "Build number $CODEBUILD_BUILD_NUMBER"
+      - echo "Build phase - build number $CODEBUILD_BUILD_NUMBER"
 
   post_build:
     commands:
-      - echo "Creating deployment package"
-      - cd app
-      - zip -r ../deploy-package.zip .
-      - cd ..
-      - echo "Verifying zip structure (must show package.json at root):"
-      - unzip -l deploy-package.zip | grep -E "package.json|app.js|node_modules/" | head -10
+      - echo "Creating deployment package from app folder"
+      - cd app && zip -r ../deploy-package.zip . && cd ..
+      - echo "Verifying package.json is at zip root:"
+      - unzip -l deploy-package.zip | grep "package.json"
 
 artifacts:
   files:
     - deploy-package.zip
   discard-paths: yes
+
+cache:
+  paths:
+    - app/node_modules/**/*
