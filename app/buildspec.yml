@@ -13,8 +13,8 @@ phases:
       - echo "Install phase - setting up Node.js"
       - node --version
       - npm --version
-      - cd app && npm ci
-
+      - cd app && npm install --prefer-offline
+  
   pre_build:
     commands:
       - echo "Pre-build phase - running checks"
