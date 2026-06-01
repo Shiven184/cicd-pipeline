@@ -1,8 +1,8 @@
 version: 0.2
 
-# This file tells CodeBuild exactly what to do during the Build stage.
-# It runs inside a fresh Linux container every time.
-# Phases run in order: install, pre_build, build, post_build
+# Each phase runs from the repo root directory.
+# We set the working directory once using env variables
+# and reference it consistently across all phases.
 
 phases:
 
@@ -13,33 +13,30 @@ phases:
       - echo "Install phase - setting up Node.js"
       - node --version
       - npm --version
-      - cd app && npm install --prefer-offline
-  
+      - npm install --prefer-offline --prefix app
+
   pre_build:
     commands:
       - echo "Pre-build phase - running checks"
-      - cd app && npm test
+      - npm test --prefix app
 
   build:
     commands:
       - echo "Build phase - packaging application"
-      - cd app
       - echo "Build number $CODEBUILD_BUILD_NUMBER"
 
   post_build:
     commands:
       - echo "Post-build phase - creating deployment package"
-      - cd app
-      - zip -r ../deploy-package.zip . -x "*.git*"
-      - echo "Package created successfully"
+      - cd app && zip -r ../deploy-package.zip . -x "*.git*" -x "node_modules/*"
+      - echo "Package size $(du -sh ../deploy-package.zip)"
+      - echo "Build complete"
 
-# This is what gets passed to the Deploy stage (Elastic Beanstalk)
 artifacts:
   files:
     - deploy-package.zip
   discard-paths: yes
 
-# Cache node_modules so installs are faster on subsequent builds
 cache:
   paths:
     - app/node_modules/**/*
