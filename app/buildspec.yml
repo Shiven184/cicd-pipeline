@@ -1,23 +1,19 @@
 version: 0.2
 
-# Each phase runs from the repo root directory.
-# We set the working directory once using env variables
-# and reference it consistently across all phases.
-
 phases:
 
   install:
     runtime-versions:
       nodejs: 20
     commands:
-      - echo "Install phase - setting up Node.js"
+      - echo "Install phase"
       - node --version
       - npm --version
-      - npm install --prefer-offline --prefix app
+      - npm install --prefix app
 
   pre_build:
     commands:
-      - echo "Pre-build phase - running checks"
+      - echo "Pre-build phase - running tests"
       - npm test --prefix app
 
   build:
@@ -27,10 +23,13 @@ phases:
 
   post_build:
     commands:
-      - echo "Post-build phase - creating deployment package"
-      - cd app && zip -r ../deploy-package.zip . -x "*.git*" -x "node_modules/*"
-      - echo "Package size $(du -sh ../deploy-package.zip)"
-      - echo "Build complete"
+      - echo "Post-build - creating deployment package"
+      - cd app
+      - zip -r ../deploy-package.zip . -x "*.git*"
+      - cd ..
+      - echo "Package contents:"
+      - unzip -l deploy-package.zip | head -20
+      - echo "Package size $(du -sh deploy-package.zip)"
 
 artifacts:
   files:
