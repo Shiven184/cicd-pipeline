@@ -140,6 +140,32 @@ Resources:
           Status: ENABLED
           GroupName: !Sub '/aws/codebuild/${ProjectName}-${StageName}'
 
+
+  # IAM role for Elastic Beanstalk EC2 instances
+  BeanstalkInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${ProjectName}-beanstalk-ec2-role-${StageName}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker
+        - arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier
+
+  # Instance profile wraps the role so EC2 can use it
+  BeanstalkInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${ProjectName}-beanstalk-profile-${StageName}'
+      Roles:
+        - !Ref BeanstalkInstanceRole
+
   # Elastic Beanstalk application
   BeanstalkApp:
     Type: AWS::ElasticBeanstalk::Application
@@ -158,6 +184,9 @@ Resources:
         Name: WebServer
         Type: Standard
       OptionSettings:
+        - Namespace: aws:autoscaling:launchconfiguration
+          OptionName: IamInstanceProfile
+          Value: !Ref BeanstalkInstanceProfile
         - Namespace: aws:autoscaling:launchconfiguration
           OptionName: InstanceType
           Value: t3.micro
