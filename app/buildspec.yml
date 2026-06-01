@@ -20,15 +20,15 @@ phases:
 
   post_build:
     commands:
-      - echo "Creating deployment package from app folder"
-      - cd app && zip -r ../deploy-package.zip . && cd ..
-      - echo "Verifying package.json is at zip root:"
-      - unzip -l deploy-package.zip | grep "package.json"
+      - echo "Post-build complete"
 
 artifacts:
+  # Output the app folder contents directly - NOT as a zip
+  # CodePipeline wraps artifacts automatically - double zipping breaks Beanstalk
+  base-directory: app
   files:
-    - deploy-package.zip
-  discard-paths: yes
+    - '**/*'
+  discard-paths: no
 
 cache:
   paths:
